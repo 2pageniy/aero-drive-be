@@ -4,10 +4,11 @@ const Permission = require('../models/Permission');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
+const ApiError = require("../error/ApiError");
 
-const generateJwt = (id, email, role) => {
+const generateJwt = (id, email, roles) => {
     return jwt.sign(
-        {id, email, role},
+        {id, email, roles},
         process.env.SECRET_KEY,
         {expiresIn: '24h'}
     )
@@ -37,7 +38,7 @@ class UserController {
 
             return res.json({token})
         } catch (e) {
-            console.log(e)
+            next(ApiError.badRequest('Error', e))
         }
     }
 
@@ -67,12 +68,15 @@ class UserController {
             const userData = {id: user.id, email: user.email, roles};
             return res.json({token, user: userData});
         } catch (e) {
-            console.log(e)
+            next(ApiError.badRequest('Error', e))
         }
     }
 
-    async check() {
-
+    async check(req, res, next) {
+        const user = req.user;
+        const {id, email, roles} = user;
+        const token = generateJwt(id, email, roles)
+        return res.json({token, user})
     }
 }
 
