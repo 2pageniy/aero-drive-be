@@ -56,9 +56,16 @@ class UserController {
             if (!isPassEquals) {
                 return res.status(400).json({message: 'Incorrect password or email'});
             }
-            const {role} = await Permission.findOne({where: {userId: user.id}});
-            const token = generateJwt(user.id, user.email, role)
-            return res.json({token})
+
+            //Search all rolesId and search all roles in array
+            let rolesId = await Permission.findAll({where: {userId: user.id}});
+            rolesId = rolesId.map(roleId => roleId.roleId)
+            let roles = await Role.findAll({where: {id: rolesId}});
+            roles = roles.map(role => role.role)
+
+            const token = generateJwt(user.id, user.email, roles);
+            const userData = {id: user.id, email: user.email, roles};
+            return res.json({token, user: userData});
         } catch (e) {
             console.log(e)
         }
