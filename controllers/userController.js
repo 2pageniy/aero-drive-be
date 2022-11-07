@@ -5,6 +5,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const ApiError = require("../error/ApiError");
+const fileService = require('../services/fileService');
+const File = require('../models/File');
 
 const generateJwt = (id, email, roles) => {
     return jwt.sign(
@@ -32,7 +34,11 @@ class UserController {
             const hashPassword = await bcrypt.hash(password, 5);
             const userRole = await Role.findOne({where: {role: 'user'}});
             const user = await User.create({email, password: hashPassword});
+
             await Permission.create({userId: user.id, roleId: userRole.id});
+
+            const file = await File.create({userId: user.id, name: '', type: 'dir'});
+            await fileService.createDir(file)
 
             const token = generateJwt(user.id, user.email, userRole.role);
 

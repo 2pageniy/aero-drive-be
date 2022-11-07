@@ -13,6 +13,8 @@ Access.belongsTo(User, {onDelete: "CASCADE"});
 User.hasMany(Permission, {onDelete: "CASCADE"});
 Permission.belongsTo(User, {onDelete: "CASCADE"});
 
+File.belongsTo(File, {as: 'parent'});
+
 File.hasMany(Access);
 Access.belongsTo(File);
 
