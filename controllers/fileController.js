@@ -1,5 +1,6 @@
 const fileService = require('../services/fileService');
 const File = require('../models/File');
+const ApiError = require("../error/ApiError");
 
 class FileController {
     async createDir(req, res) {
@@ -17,8 +18,22 @@ class FileController {
 
             return res.status(200).json(file)
         } catch (e) {
-            console.log(e)
-            return res.status(400).json(e)
+            return ApiError.badRequest('Error', e)
+        }
+    }
+
+    async getFiles(req, res, next) {
+        try {
+            console.log(req.user.id)
+            const files = await File.findAll({
+                where: {
+                    userId: req.user.id,
+                    parentId: req.query.parent || null,
+                }
+            })
+            return res.json({files})
+        } catch (e) {
+            return ApiError.internal('Error', e)
         }
     }
 }
