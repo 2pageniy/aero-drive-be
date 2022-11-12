@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const sequelize = require('./db');
 const models = require('./models/index');
@@ -9,6 +10,7 @@ const PORT = process.env.PORT || 5000;
 
 const app = express();
 
+app.use(fileUpload({}))
 app.use(express.json())
 app.use(cors({
     credentials: true,

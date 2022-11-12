@@ -37,7 +37,7 @@ class UserController {
 
             await Permission.create({userId: user.id, roleId: userRole.id});
 
-            const file = await File.create({userId: user.id, name: '', type: 'dir'});
+            const file = await File.build({userId: user.id, name: '', type: 'dir'});
             await fileService.createDir(file)
 
             const token = generateJwt(user.id, user.email, userRole.role);
