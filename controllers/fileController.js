@@ -4,6 +4,8 @@ const path = require('path');
 const File = require('../models/File');
 const ApiError = require("../error/ApiError");
 const User = require("../models/User");
+const { QueryTypes } = require('sequelize');
+const sequelize = require('../db')
 
 class FileController {
     async createDir(req, res) {
@@ -14,7 +16,7 @@ class FileController {
             if (!parentFile) {
                 file.path = name;
             } else {
-                file.path = `${parentFile.path}\\${file.name}`
+                file.path = path.join(parentFile.path, file.name);
             }
             await fileService.createDir(file)
             await file.save()
@@ -47,18 +49,19 @@ class FileController {
             const parent = parentId ? await File.findOne({
                 where: {
                     userId: req.user.id,
-                    parentId
+                    id: parentId
                 }
             }) : null;
 
             const userId = req.user.id;
-            const user = await User.findOne({id: userId});
+            const user = await User.findOne({where: {id: userId}});
 
-            if (user.usedSpace + file.size > 10000) {
-                return ApiError.internal('Error', 'There no space on the disk')
+
+            if (parseInt(user.usedSpace) + parseInt(file.size) > 1024*1024*1024) {
+                next(ApiError.internal('Error', 'There no space on the disk'));
             }
 
-            user.usedSpace += file.size;
+            user.usedSpace = parseInt(user.usedSpace) + parseInt(file.size);
 
             let pathFile;
             if (parent) {
@@ -69,7 +72,7 @@ class FileController {
 
 
             if (fs.existsSync(pathFile)) {
-                return ApiError.internal('Error', 'File already exist');
+                next(ApiError.internal('Error', 'File already exist'))
             }
 
             await file.mv(pathFile);
@@ -89,7 +92,25 @@ class FileController {
             return res.json(dbFile)
         } catch (e) {
             console.log(e);
-            return ApiError.internal('Error', e)
+            next(ApiError.internal('Error', e));
+        }
+    }
+
+    async downloadFile(req, res, next) {
+        try {
+            let file = await sequelize.query(`SELECT * FROM "files" AS "file" WHERE "file"."id" = ${req.query.id} AND "file"."userId" = ${req.user.id}`, { type: QueryTypes.SELECT });
+            //const file = await File.findOne({where: {id: req.query.id, userId: 17}})
+            file = file[0];
+            const pathFile = path.join(__dirname, '..', 'files', req.user.id.toString(), file.path, file.name);
+
+            if (fs.existsSync(pathFile)) {
+                return res.download(pathFile, file.name);
+            }
+
+            next(ApiError.badRequest('Download Error'))
+        } catch(e) {
+            console.log(e);
+            next(ApiError.internal('Download error', e));
         }
     }
 }
