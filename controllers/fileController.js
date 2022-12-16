@@ -11,15 +11,20 @@ class FileController {
     async createDir(req, res) {
         try {
             const {name, type, parentId} = req.body;
-            const file = File.build({name, type, parentId, userId: req.user.id});
-            const parentFile = parentId ? await File.findOne({where: {id: parentId}}) : null;
+            const file = {name, type, parentId: parentId || null, userId: req.user.id};
+            const parentFile = parentId
+                ?
+                await sequelize.query(`SELECT * FROM files WHERE id = ${parentId}`, {type: QueryTypes.SELECT})
+                :
+                '';
             if (!parentFile) {
                 file.path = name;
             } else {
-                file.path = path.join(parentFile.path, file.name);
+                file.path = path.join(parentFile[0].path, file.name);
             }
             await fileService.createDir(file)
-            await file.save()
+            console.log(file.name, file.type, file.path, file.parentId, file.userId);
+            await sequelize.query(`INSERT INTO files (name, type, path, "parentId", "userId") VALUES ('${file.name}', '${file.type}', '${file.path}', ${file.parentId}, ${file.userId})`, {type: QueryTypes.INSERT})
 
             return res.status(200).json(file)
         } catch (e) {
@@ -29,13 +34,13 @@ class FileController {
 
     async getFiles(req, res, next) {
         try {
-            console.log(req.user.id)
-            let files = await File.findAll({
-                where: {
-                    userId: req.user.id,
-                    parentId: req.query.parent || null,
-                }
-            })
+            const parent = req.query.parent ?? null;
+            let files;
+            if (parent) {
+                files = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND "parentId" = ${parent}`, {type: QueryTypes.SELECT})
+            } else {
+                files = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND "parentId" IS NULL`, {type: QueryTypes.SELECT})
+            }
             return res.json(files)
         } catch (e) {
             return ApiError.internal('Error', e)
@@ -46,25 +51,23 @@ class FileController {
         try {
             const file = req.files.file;
             const parentId = req.body.parent;
-            const parent = parentId ? await File.findOne({
-                where: {
-                    userId: req.user.id,
-                    id: parentId
-                }
-            }) : null;
+            let parent = parentId ?
+                await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND id = ${parentId}`, {type: QueryTypes.SELECT})
+                :
+                null;
 
             const userId = req.user.id;
-            const user = await User.findOne({where: {id: userId}});
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${userId}`, {type: QueryTypes.SELECT});
 
+            const usedSpace = parseInt(user.usedSpace) + parseInt(file.size);
 
-            if (parseInt(user.usedSpace) + parseInt(file.size) > 1024*1024*1024) {
+            if (usedSpace > 1024*1024*1024) {
                 next(ApiError.internal('Error', 'There no space on the disk'));
             }
 
-            user.usedSpace = parseInt(user.usedSpace) + parseInt(file.size);
-
             let pathFileSystem;
             if (parent) {
+                parent = parent[0];
                 pathFileSystem = path.join(__dirname, '..', 'files', `${userId}`, `${parent.path}`, `${file.name}`);
             } else {
                 pathFileSystem = path.join(__dirname, '..', 'files', `${userId}`, `${file.name}`);
@@ -83,17 +86,10 @@ class FileController {
                 pathFile = path.join(parent.path, file.name);
             }
 
-            const dbFile = await File.create({
-                name: file.name,
-                type,
-                size: file.size,
-                path: pathFile,
-                parentId: parent?.id,
-                userId
-            })
+            await sequelize.query(`INSERT INTO files (name, type, size, path, "parentId", "userId") VALUES ('${file.name}', '${type}', ${file.size}, '${pathFile}', ${parent?.id || null}, ${userId})`, {type: QueryTypes.INSERT})
+            await sequelize.query(`UPDATE users SET "usedSpace" = ${usedSpace} WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
 
-            await user.save();
-
+            const [dbFile] = await sequelize.query(`SELECT * FROM files WHERE path = '${pathFile}'`, {type: QueryTypes.SELECT})
             return res.json(dbFile)
         } catch (e) {
             console.log(e);
@@ -103,10 +99,8 @@ class FileController {
 
     async downloadFile(req, res, next) {
         try {
-            let file = await sequelize.query(`SELECT * FROM "files" AS "file" WHERE "file"."id" = ${req.query.id} AND "file"."userId" = ${req.user.id}`, { type: QueryTypes.SELECT });
-            //const file = await File.findOne({where: {id: req.query.id, userId: 17}})
-            file = file[0];
-            const pathFile = path.join(__dirname, '..', 'files', req.user.id.toString(), file.path, file.name);
+            const [file] = await sequelize.query(`SELECT * FROM files WHERE id = ${req.query.id} AND "userId" = ${req.user.id}`, { type: QueryTypes.SELECT });
+            const pathFile = path.join(__dirname, '..', 'files', req.user.id.toString(), file.path);
 
             if (fs.existsSync(pathFile)) {
                 return res.download(pathFile, file.name);
@@ -121,17 +115,17 @@ class FileController {
 
     async deleteFile(req, res, next) {
         try {
-            let file = await sequelize.query(`SELECT * FROM "files" AS "file" WHERE "file"."id" = ${req.query.id} AND "file"."userId" = ${req.user.id}`, { type: QueryTypes.SELECT });
-            file = file[0];
+            const [file] = await sequelize.query(`SELECT * FROM files WHERE id = ${req.query.id} AND "userId" = ${req.user.id}`, { type: QueryTypes.SELECT });
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, { type: QueryTypes.SELECT });
 
             if (!file) {
                 next(ApiError.badRequest('file not found'))
             }
-            console.log(1)
-            fileService.deleteFile(file);
-            console.log(2)
 
-            await sequelize.query(`DELETE FROM "files" WHERE "files"."id" = ${req.query.id} AND "files"."userId" = ${req.user.id}`, {type: QueryTypes.DELETE});
+            fileService.deleteFile(file);
+
+            await sequelize.query(`UPDATE users SET "usedSpace" = ${user.usedSpace - file.size} WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
+            await sequelize.query(`DELETE FROM "files" WHERE id = ${req.query.id} AND "userId" = ${req.user.id}`, {type: QueryTypes.DELETE});
             return res.json({message: 'File was deleted'})
         } catch (e) {
             console.log(e);

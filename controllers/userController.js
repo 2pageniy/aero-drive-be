@@ -7,6 +7,8 @@ const { validationResult } = require('express-validator');
 const ApiError = require("../error/ApiError");
 const fileService = require('../services/fileService');
 const File = require('../models/File');
+const sequelize = require('../db')
+const {QueryTypes} = require("sequelize");
 
 const generateJwt = (id, email, roles) => {
     return jwt.sign(
@@ -25,25 +27,26 @@ class UserController {
             }
 
             const {email, password} = req.body;
-            const candidate = await User.findOne({where: {email}});
+            const candidate = await sequelize.query(`SELECT * FROM users WHERE email = '${email}'`, {type: QueryTypes.SELECT});
 
-            if (candidate) {
-                res.status(400).json({message: 'User with such email exists'})
+            if (candidate.length) {
+                return res.status(400).json({message: 'User with such email exists'})
             }
 
             const hashPassword = await bcrypt.hash(password, 5);
-            const userRole = await Role.findOne({where: {role: 'user'}});
-            const user = await User.create({email, password: hashPassword});
+            const [userRole] = await sequelize.query(`SELECT * FROM roles WHERE role = 'user';`, {type: QueryTypes.SELECT});
+            await sequelize.query(`INSERT INTO users (email, password) VALUES ('${email}', '${hashPassword}');`, {type: QueryTypes.INSERT});
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE email = '${email}'`, {type: QueryTypes.SELECT});
 
-            await Permission.create({userId: user.id, roleId: userRole.id});
-
-            const file = await File.build({userId: user.id, name: '', type: 'dir'});
+            await sequelize.query(`INSERT INTO permissions ("userId", "roleId") VALUES ('${user.id}', '${userRole.id}');`, {type: QueryTypes.INSERT});
+            const file = {userId: user.id, name: '', type: 'dir', path: ''};
             await fileService.createDir(file)
 
-            const token = generateJwt(user.id, user.email, userRole.role);
+            const token = generateJwt(user.id, user.email, 'user');
 
             return res.json({token})
         } catch (e) {
+            console.log(e)
             next(ApiError.badRequest('Error', e))
         }
     }
@@ -51,8 +54,7 @@ class UserController {
     async login(req, res, next) {
         try {
             const {email, password} = req.body;
-
-            const user = await User.findOne({where: {email}});
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE email = '${email}'`, {type: QueryTypes.SELECT});
 
             if (!user) {
                 return res.status(404).json({message: 'User not found'});
@@ -65,15 +67,16 @@ class UserController {
             }
 
             //Search all rolesId and search all roles in array
-            let rolesId = await Permission.findAll({where: {userId: user.id}});
+            let rolesId = await sequelize.query(`SELECT * FROM permissions WHERE "userId" = ${user.id}`, {type: QueryTypes.SELECT});
             rolesId = rolesId.map(roleId => roleId.roleId)
-            let roles = await Role.findAll({where: {id: rolesId}});
+            let roles = await sequelize.query(`SELECT * FROM roles WHERE "id" = ${rolesId}`, {type: QueryTypes.SELECT});
             roles = roles.map(role => role.role)
 
             const token = generateJwt(user.id, user.email, roles);
             const userData = {id: user.id, email: user.email, roles};
             return res.json({token, user: userData});
         } catch (e) {
+            console.log(e)
             next(ApiError.badRequest('Error', e))
         }
     }
