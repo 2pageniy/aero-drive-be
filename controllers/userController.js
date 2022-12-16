@@ -1,12 +1,8 @@
-const User = require('../models/User');
-const Role = require('../models/Role');
-const Permission = require('../models/Permission');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const ApiError = require("../error/ApiError");
 const fileService = require('../services/fileService');
-const File = require('../models/File');
 const sequelize = require('../db')
 const {QueryTypes} = require("sequelize");
 
@@ -44,7 +40,9 @@ class UserController {
 
             const token = generateJwt(user.id, user.email, 'user');
 
-            return res.json({token})
+            const userData = {id: user.id, email: user.email, roles: ['user']};
+
+            return res.json({token, userData})
         } catch (e) {
             console.log(e)
             next(ApiError.badRequest('Error', e))

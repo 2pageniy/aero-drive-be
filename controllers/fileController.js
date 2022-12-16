@@ -1,9 +1,7 @@
 const fileService = require('../services/fileService');
 const fs = require('fs');
 const path = require('path');
-const File = require('../models/File');
 const ApiError = require("../error/ApiError");
-const User = require("../models/User");
 const { QueryTypes } = require('sequelize');
 const sequelize = require('../db')
 
@@ -23,10 +21,11 @@ class FileController {
                 file.path = path.join(parentFile[0].path, file.name);
             }
             await fileService.createDir(file)
-            console.log(file.name, file.type, file.path, file.parentId, file.userId);
-            await sequelize.query(`INSERT INTO files (name, type, path, "parentId", "userId") VALUES ('${file.name}', '${file.type}', '${file.path}', ${file.parentId}, ${file.userId})`, {type: QueryTypes.INSERT})
 
-            return res.status(200).json(file)
+            await sequelize.query(`INSERT INTO files (name, type, path, "parentId", "userId") VALUES ('${file.name}', '${file.type}', '${file.path}', ${file.parentId}, ${file.userId})`, {type: QueryTypes.INSERT})
+            const [dbDir] = await sequelize.query(`SELECT * FROM files WHERE path = '${file.path}'`, {type: QueryTypes.SELECT})
+
+            return res.status(200).json(dbDir)
         } catch (e) {
             return ApiError.badRequest('Error', e)
         }
@@ -34,6 +33,8 @@ class FileController {
 
     async getFiles(req, res, next) {
         try {
+            const {sort} = req.query;
+
             const parent = req.query.parent ?? null;
             let files;
             if (parent) {
@@ -41,6 +42,32 @@ class FileController {
             } else {
                 files = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND "parentId" IS NULL`, {type: QueryTypes.SELECT})
             }
+            files = [...files];
+
+            function sortFiles(a, b) {
+                if (a > b) {
+                    return 1;
+                }
+                if (a < b) {
+                    return -1;
+                }
+                return 0;
+            }
+
+            switch (sort) {
+                case 'name':
+                    files.sort((a, b) => sortFiles(a.name, b.name))
+                    break;
+
+                case 'type':
+                    files.sort((a, b) => sortFiles(a.type, b.type))
+                    break;
+
+                case 'date':
+                    files.sort((a, b) => Date(a.createdAt) - Date(b.createdAt))
+                    break;
+            }
+
             return res.json(files)
         } catch (e) {
             return ApiError.internal('Error', e)
@@ -90,6 +117,7 @@ class FileController {
             await sequelize.query(`UPDATE users SET "usedSpace" = ${usedSpace} WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
 
             const [dbFile] = await sequelize.query(`SELECT * FROM files WHERE path = '${pathFile}'`, {type: QueryTypes.SELECT})
+
             return res.json(dbFile)
         } catch (e) {
             console.log(e);
@@ -130,6 +158,21 @@ class FileController {
         } catch (e) {
             console.log(e);
             next(ApiError.badRequest('Dir is not empty'))
+        }
+    }
+
+    async searchFile(req, res, next) {
+        try {
+            const searchName = req.query.search;
+            let files = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id}`, {type: QueryTypes.SELECT})
+            console.log(searchName)
+            files = files.filter(file => file.name.includes(searchName));
+
+            return res.json(files)
+
+        } catch (e) {
+            console.log(e)
+            next(ApiError.badRequest('Error'))
         }
     }
 }
