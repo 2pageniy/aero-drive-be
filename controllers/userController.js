@@ -5,6 +5,9 @@ const ApiError = require("../error/ApiError");
 const fileService = require('../services/fileService');
 const sequelize = require('../db')
 const {QueryTypes} = require("sequelize");
+const fs = require('fs');
+const fsPromises = require('fs/promises');
+const path = require("path");
 
 const generateJwt = (id, email, roles) => {
     return jwt.sign(
@@ -88,9 +91,18 @@ class UserController {
     async check(req, res, next) {
         try {
             const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
-            const {id, email, roles} = user;
+            const roles = req.user.roles;
+            const {id, email, name, usedSpace, avatar} = user;
             const token = generateJwt(id, email, roles);
-            return res.json({token, user});
+            const dbUser = {
+                id,
+                email,
+                roles,
+                name,
+                usedSpace,
+                avatar,
+            }
+            return res.json({token, user: dbUser});
         } catch (e) {
             console.log(e);
             next(ApiError.badRequest('Error auth'))
@@ -134,6 +146,25 @@ class UserController {
         } catch (e) {
             console.log(e);
             next(ApiError.badRequest('Error Update'))
+        }
+    }
+
+    async deleteUser(req, res, next) {
+        try {
+            const id = req.query.id
+            const pathUser = path.join(__dirname, '..', 'files', `${id}`)
+
+            await sequelize.query(`DELETE FROM users WHERE id = ${id}`);
+            await sequelize.query(`DELETE FROM files WHERE "userId" = ${id}`);
+            await sequelize.query(`DELETE FROM permissions WHERE "userId" = ${id}`);
+            await sequelize.query(`DELETE FROM accesses WHERE "userId" = ${id}`);
+
+            await fsPromises.rm(pathUser, {recursive: true, force: true});
+
+            return res.json({message: 'Delete user successful'})
+        } catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Error delete user'))
         }
     }
 }

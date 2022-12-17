@@ -224,6 +224,45 @@ class FileController {
             next(ApiError.badRequest('Error favorite'))
         }
     }
+
+    async createCopyFile(req, res, next) {
+        try {
+            const {file} = req.body;
+            console.log(file.path)
+            let pathFile = path.join(file.path, '..', `${file.name}`);
+
+            let count = 1;
+            let finalPath = `${pathFile}(${count})`
+            while(fs.existsSync(path.join(__dirname, '..', 'files', `${req.user.id}`, `${finalPath}`))) {
+                count += 1;
+                finalPath = `${pathFile}(${count})`;
+            }
+
+            await sequelize.query(`INSERT INTO files (name, type, size, path, "parentId", "userId") VALUES ('${file.name}(${count})', '${file.type}', ${file.size}, '${finalPath}', ${file.parentId}, ${file.userId})`, {type: QueryTypes.INSERT})
+            const [dbFile] = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND path = '${finalPath}'`, {type: QueryTypes.SELECT});
+            await fs.copyFileSync(path.join(__dirname, '..', 'files', `${req.user.id}`, file.path), path.join(__dirname, '..', 'files', `${req.user.id}`, `${finalPath}`))
+
+
+            return res.json(dbFile)
+        } catch (e) {
+            console.log(e)
+            next(ApiError.badRequest('Error copy file'))
+        }
+    }
+
+    async readFile(req, res, next) {
+        try {
+            const {file} = req.body;
+            const pathFile = path.join(__dirname, '..', 'files', `${req.user.id}`, file.path);
+            const stream = fs.createReadStream(pathFile, );
+            let data = '';
+            stream.on('data', chunk => data += chunk);
+            stream.on('end', () => res.json({data}));
+        } catch (e) {
+            console.log(e)
+            next(ApiError.badRequest('Error read file'))
+        }
+    }
 }
 
 module.exports = new FileController();
