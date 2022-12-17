@@ -11,12 +11,13 @@ const sequelize = require('../db')
 module.exports = sequelize.query(`
 CREATE TABLE IF NOT EXISTS "users"(
     "id"  SERIAL ,
+    "name" VARCHAR(255),
     "email" VARCHAR(255) UNIQUE,
     "password" VARCHAR(255),
     "usedSpace" VARCHAR(255) DEFAULT 0,
     "avatar" VARCHAR(255),
     PRIMARY KEY ("id")
-);`)
+);`);
 
 // CREATE TABLE IF NOT EXISTS "users"(
 //     "id"  SERIAL ,

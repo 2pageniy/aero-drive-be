@@ -4,6 +4,7 @@
   "description": "server for aero drive",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "dev": "nodemon index.js"
   },
   "repository": {

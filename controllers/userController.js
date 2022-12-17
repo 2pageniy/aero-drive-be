@@ -22,7 +22,7 @@ class UserController {
                 return res.status(400).json({message: 'Incorrect request', errors})
             }
 
-            const {email, password} = req.body;
+            const {name, email, password} = req.body;
             const candidate = await sequelize.query(`SELECT * FROM users WHERE email = '${email}'`, {type: QueryTypes.SELECT});
 
             if (candidate.length) {
@@ -31,7 +31,7 @@ class UserController {
 
             const hashPassword = await bcrypt.hash(password, 5);
             const [userRole] = await sequelize.query(`SELECT * FROM roles WHERE role = 'user';`, {type: QueryTypes.SELECT});
-            await sequelize.query(`INSERT INTO users (email, password) VALUES ('${email}', '${hashPassword}');`, {type: QueryTypes.INSERT});
+            await sequelize.query(`INSERT INTO users (name, email, password) VALUES ('${name}', '${email}', '${hashPassword}');`, {type: QueryTypes.INSERT});
             const [user] = await sequelize.query(`SELECT * FROM users WHERE email = '${email}'`, {type: QueryTypes.SELECT});
 
             await sequelize.query(`INSERT INTO permissions ("userId", "roleId") VALUES ('${user.id}', '${userRole.id}');`, {type: QueryTypes.INSERT});
@@ -40,7 +40,7 @@ class UserController {
 
             const token = generateJwt(user.id, user.email, 'user');
 
-            const userData = {id: user.id, email: user.email, roles: ['user']};
+            const userData = {id: user.id, name, email: user.email, roles: ['user']};
 
             return res.json({token, userData})
         } catch (e) {
@@ -71,7 +71,13 @@ class UserController {
             roles = roles.map(role => role.role)
 
             const token = generateJwt(user.id, user.email, roles);
-            const userData = {id: user.id, email: user.email, roles};
+            const userData = {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                roles,
+                avatar: user.avatar
+            };
             return res.json({token, user: userData});
         } catch (e) {
             console.log(e)
@@ -80,10 +86,16 @@ class UserController {
     }
 
     async check(req, res, next) {
-        const user = req.user;
-        const {id, email, roles} = user;
-        const token = generateJwt(id, email, roles)
-        return res.json({token, user})
+        try {
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
+            const {id, email, roles} = user;
+            const token = generateJwt(id, email, roles);
+            return res.json({token, user});
+        } catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Error auth'))
+        }
+
     }
 }
 

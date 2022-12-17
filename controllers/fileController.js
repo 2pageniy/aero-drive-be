@@ -185,7 +185,7 @@ class FileController {
 
             await file.mv(path.join(__dirname, '..', 'static', avatarName));
             await sequelize.query(`UPDATE users SET "avatar" = '${avatarName}' WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
-
+            user.avatar = avatarName;
             return res.json(user);
         }
          catch (e) {
@@ -200,6 +200,8 @@ class FileController {
 
             await fs.unlinkSync(path.join(__dirname, '..', 'static', user.avatar))
             await sequelize.query(`UPDATE users SET "avatar" = null WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
+            user.avatar = null;
+
             return res.json(user);
         }
         catch (e) {
