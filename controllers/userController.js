@@ -97,6 +97,45 @@ class UserController {
         }
 
     }
+
+    async updateUser(req, res, next) {
+        try {
+            const {name, email} = req.body
+
+            await sequelize.query(`UPDATE users SET name = '${name}', email = '${email}' WHERE id = ${req.user.id}`, {type: QueryTypes.UPDATE})
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
+            return res.json({user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    usedSpace: user.usedSpace,
+                    avatar: user.avatar
+                },
+                message: 'Update successful'
+            })
+        } catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Error Update'))
+        }
+    }
+
+    async changePassword(req, res, next) {
+        try {
+            const {password, newPassword} = req.body
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
+            const isPassEquals = await bcrypt.compare(password, user.password);
+
+            if (!isPassEquals) {
+                return res.status(400).json({message: 'Incorrect password'});
+            }
+            const hashPassword = await bcrypt.hash(newPassword, 5);
+            await sequelize.query(`UPDATE users SET password = '${hashPassword}' WHERE id = ${req.user.id}`, {type: QueryTypes.UPDATE})
+            return res.json({message: 'Password update'})
+        } catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Error Update'))
+        }
+    }
 }
 
 module.exports = new UserController();
