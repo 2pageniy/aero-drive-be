@@ -5,7 +5,6 @@ const ApiError = require("../error/ApiError");
 const fileService = require('../services/fileService');
 const sequelize = require('../db')
 const {QueryTypes} = require("sequelize");
-const fs = require('fs');
 const fsPromises = require('fs/promises');
 const path = require("path");
 

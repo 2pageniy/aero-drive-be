@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const ApiError = require("../error/ApiError");
 const { QueryTypes } = require('sequelize');
-const sequelize = require('../db')
+const sequelize = require('../db');
 const uuid = require('uuid');
 
 class FileController {
@@ -128,8 +128,8 @@ class FileController {
 
     async downloadFile(req, res, next) {
         try {
-            const [file] = await sequelize.query(`SELECT * FROM files WHERE id = ${req.query.id} AND "userId" = ${req.user.id}`, { type: QueryTypes.SELECT });
-            const pathFile = path.join(__dirname, '..', 'files', req.user.id.toString(), file.path);
+            const [file] = await sequelize.query(`SELECT * FROM files WHERE id = ${req.query.id}`, { type: QueryTypes.SELECT });
+            const pathFile = path.join(__dirname, '..', 'files', file.userId.toString(), file.path);
 
             if (fs.existsSync(pathFile)) {
                 return res.download(pathFile, file.name);
@@ -228,7 +228,6 @@ class FileController {
     async createCopyFile(req, res, next) {
         try {
             const {file} = req.body;
-            console.log(file.path)
             let pathFile = path.join(file.path, '..', `${file.name}`);
 
             let count = 1;
@@ -238,10 +237,13 @@ class FileController {
                 finalPath = `${pathFile}(${count})`;
             }
 
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
             await sequelize.query(`INSERT INTO files (name, type, size, path, "parentId", "userId") VALUES ('${file.name}(${count})', '${file.type}', ${file.size}, '${finalPath}', ${file.parentId}, ${file.userId})`, {type: QueryTypes.INSERT})
-            const [dbFile] = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND path = '${finalPath}'`, {type: QueryTypes.SELECT});
-            await fs.copyFileSync(path.join(__dirname, '..', 'files', `${req.user.id}`, file.path), path.join(__dirname, '..', 'files', `${req.user.id}`, `${finalPath}`))
+            await sequelize.query(`UPDATE users SET "usedSpace" = ${parseInt(user.usedSpace) + file.size} WHERE id = ${req.user.id}`, {type: QueryTypes.UPDATE})
 
+            const [dbFile] = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id} AND path = '${finalPath}'`, {type: QueryTypes.SELECT});
+
+            await fs.copyFileSync(path.join(__dirname, '..', 'files', `${req.user.id}`, file.path), path.join(__dirname, '..', 'files', `${req.user.id}`, `${finalPath}`))
 
             return res.json(dbFile)
         } catch (e) {
@@ -253,7 +255,8 @@ class FileController {
     async readFile(req, res, next) {
         try {
             const {file} = req.body;
-            const pathFile = path.join(__dirname, '..', 'files', `${req.user.id}`, file.path);
+
+            const pathFile = path.join(__dirname, '..', 'files', `${file.userId}`, file.path);
             const stream = fs.createReadStream(pathFile, );
             let data = '';
             stream.on('data', chunk => data += chunk);
@@ -262,6 +265,35 @@ class FileController {
             console.log(e)
             next(ApiError.badRequest('Error read file'))
         }
+    }
+
+    async createAccessLink(req, res, next) {
+        try {
+            const file = req.body.file;
+            console.log(file)
+            const link = uuid.v4();
+
+            await sequelize.query(`UPDATE files SET "access_link" = '${link}' WHERE id = ${file.id}`, {type: QueryTypes.UPDATE})
+
+            return res.json({message: 'Link was created', link})
+        } catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Error create link'))
+        }
+    }
+
+    async getFilesOnLink(req, res, next) {
+        try {
+            const link = req.query.link;
+
+            const [file] = await sequelize.query(`SELECT * FROM files WHERE "access_link" = '${link}'`, {type: QueryTypes.SELECT})
+
+            return res.json(file);
+        } catch (e) {
+            console.log(e);
+            next(ApiError.notFound())
+        }
+
     }
 }
 
