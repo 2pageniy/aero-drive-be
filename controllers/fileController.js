@@ -4,6 +4,7 @@ const path = require('path');
 const ApiError = require("../error/ApiError");
 const { QueryTypes } = require('sequelize');
 const sequelize = require('../db')
+const uuid = require('uuid');
 
 class FileController {
     async createDir(req, res) {
@@ -165,7 +166,7 @@ class FileController {
         try {
             const searchName = req.query.search;
             let files = await sequelize.query(`SELECT * FROM files WHERE "userId" = ${req.user.id}`, {type: QueryTypes.SELECT})
-            console.log(searchName)
+
             files = files.filter(file => file.name.includes(searchName));
 
             return res.json(files)
@@ -173,6 +174,37 @@ class FileController {
         } catch (e) {
             console.log(e)
             next(ApiError.badRequest('Error'))
+        }
+    }
+
+    async uploadAvatar(req, res, next) {
+        try {
+            const file = req.files.file;
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
+            const avatarName = uuid.v4() + '.jpg';
+
+            await file.mv(path.join(__dirname, '..', 'static', avatarName));
+            await sequelize.query(`UPDATE users SET "avatar" = '${avatarName}' WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
+
+            return res.json(user);
+        }
+         catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Upload avatar error'))
+        }
+    }
+
+    async deleteAvatar(req, res, next) {
+        try {
+            const [user] = await sequelize.query(`SELECT * FROM users WHERE id = ${req.user.id}`, {type: QueryTypes.SELECT});
+
+            await fs.unlinkSync(path.join(__dirname, '..', 'static', user.avatar))
+            await sequelize.query(`UPDATE users SET "avatar" = null WHERE id = ${user.id}`, {type: QueryTypes.UPDATE})
+            return res.json(user);
+        }
+        catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Delete avatar error'))
         }
     }
 }

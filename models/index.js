@@ -4,9 +4,6 @@ const Permission = require('./Permission');
 const File = require('./File');
 const Access = require('./Access');
 
-
-
-
 // User.hasMany(File, {onDelete: "CASCADE"});
 // File.belongsTo(User, {onDelete: "CASCADE"});
 //
