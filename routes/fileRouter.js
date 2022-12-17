@@ -11,5 +11,6 @@ router.get('/download', authMiddleware, fileController.downloadFile);
 router.get('/search', authMiddleware, fileController.searchFile);
 router.delete('/delete', authMiddleware, fileController.deleteFile);
 router.delete('/avatar', authMiddleware, fileController.deleteAvatar);
+router.patch('/favorite', authMiddleware, fileController.addFavorite);
 
 module.exports = router;

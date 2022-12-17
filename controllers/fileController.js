@@ -209,6 +209,21 @@ class FileController {
             next(ApiError.badRequest('Delete avatar error'))
         }
     }
+
+    async addFavorite(req, res, next) {
+        try {
+            const {file} = req.body;
+            if (file.favorite) {
+                await sequelize.query(`UPDATE files SET "favorite" = false WHERE id = ${file.id} AND "userId" = ${req.user.id}`, {type: QueryTypes.UPDATE})
+            } else {
+                await sequelize.query(`UPDATE files SET "favorite" = true WHERE id = ${file.id} AND "userId" = ${req.user.id}`, {type: QueryTypes.UPDATE})
+            }
+            return res.json({message: 'File change favorite'})
+        } catch (e) {
+            console.log(e)
+            next(ApiError.badRequest('Error favorite'))
+        }
+    }
 }
 
 module.exports = new FileController();
