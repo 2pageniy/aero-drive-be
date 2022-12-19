@@ -16,5 +16,6 @@ router.delete('/delete', authMiddleware, fileController.deleteFile);
 router.delete('/avatar', authMiddleware, fileController.deleteAvatar);
 router.patch('/favorite', authMiddleware, fileController.addFavorite);
 router.patch('/link', authMiddleware, fileController.createAccessLink);
+router.patch('/rename', authMiddleware, fileController.renameFile);
 
 module.exports = router;

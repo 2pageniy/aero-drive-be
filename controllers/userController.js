@@ -40,7 +40,7 @@ class UserController {
             const file = {userId: user.id, name: '', type: 'dir', path: ''};
             await fileService.createDir(file)
 
-            const token = generateJwt(user.id, user.email, 'user');
+            const token = generateJwt(user.id, user.email, ['user']);
 
             const userData = {id: user.id, name, email: user.email, roles: ['user']};
 
@@ -67,10 +67,16 @@ class UserController {
             }
 
             //Search all rolesId and search all roles in array
-            let rolesId = await sequelize.query(`SELECT * FROM permissions WHERE "userId" = ${user.id}`, {type: QueryTypes.SELECT});
-            rolesId = rolesId.map(roleId => roleId.roleId)
-            let roles = await sequelize.query(`SELECT * FROM roles WHERE "id" = ${rolesId}`, {type: QueryTypes.SELECT});
+            let roles = await sequelize.query(`SELECT roles.role
+                                                FROM users INNER JOIN permissions 
+                                                ON users.id = permissions."userId" 
+                                                INNER JOIN roles 
+                                                ON permissions."roleId" = roles."id"
+                                                WHERE "userId" = ${user.id};`,
+                                        {type: QueryTypes.SELECT}
+            );
             roles = roles.map(role => role.role)
+
 
             const token = generateJwt(user.id, user.email, roles);
             const userData = {
@@ -119,6 +125,7 @@ class UserController {
                     id: user.id,
                     name: user.name,
                     email: user.email,
+                    roles: req.user.roles,
                     usedSpace: user.usedSpace,
                     avatar: user.avatar
                 },
@@ -164,6 +171,29 @@ class UserController {
         } catch (e) {
             console.log(e);
             next(ApiError.badRequest('Error delete user'))
+        }
+    }
+
+    async getAllUsers(req, res, next) {
+        try {
+            const roles = req.user.roles;
+            if (!roles.includes('admin')) {
+                return (ApiError.forbidden())
+            }
+            const users = await sequelize.query(`SELECT * FROM users
+                                                    WHERE users.id NOT IN (
+                                                    SELECT users.id
+                                                    FROM users INNER JOIN permissions 
+                                                    ON users.id = permissions."userId" 
+                                                    INNER JOIN roles 
+                                                    ON permissions."roleId" = roles."id"
+                                                    WHERE roles.role = 'admin');`,
+                                            {type: QueryTypes.SELECT}
+            )
+            return res.json(users);
+        } catch (e) {
+            console.log(e);
+            next(ApiError.badRequest('Error get users'))
         }
     }
 }

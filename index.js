@@ -19,8 +19,10 @@ app.use(cors({
 }));
 app.use('/api', router);
 
+// Старт сервера
 const start = async () => {
     try {
+        // Подключение к БД
         await sequelize.authenticate();
         await sequelize.sync();
         app.listen(PORT, () => {
